@@ -65,6 +65,45 @@ test('dsa openssh cert self-signed', function (t) {
 	t.end();
 });
 
+test('rsa openssh cert signing', function (t) {
+	const int64 = Date.now();
+	const serial = new Buffer(8);
+	const MAX_UINT32 = 0xFFFFFFFF;
+	
+	const big = ~~(int64 / MAX_UINT32);
+	const low = (int64 % MAX_UINT32) - big;
+	
+	serial.writeUInt32BE(big, 0);
+	serial.writeUInt32BE(low, 4);
+	
+	let cert = new sshpk.Certificate({
+		subjects: [sshpk.Identity.forUser('ubuntu')],
+		issuer: sshpk.Identity.forHost('**'),
+		subjectKey: JIM_KEY.toPublic(),
+		issuerKey: JIM_KEY.toPublic(),
+		signatures: {},
+		serial: serial,
+		validFrom: new Date(Date.now()),
+		validUntil: new Date(Date.now() + 3600 * 1000),
+	});
+	
+	cert.signWith(JIM_KEY, {
+		keyId: 'jim.henson',
+		exts: [
+			'permit-pty',
+			'permit-X11-forwarding'
+		],
+		critical: {}
+	});
+
+	let sshCert = cert.toString('openssh');
+	cert = sshpk.parseCertificate(sshCert, 'openssh');
+	t.ok(cert.isSignedByKey(JIM_KEY));
+	t.ok(!cert.isSignedByKey(GEORGE_KEY));
+	t.strictEqual(cert.keyId, 'jim.henson');
+	t.end();
+});
+
 test('dsa x509 cert self-signed', function (t) {
 	var cert = sshpk.parseCertificate(GEORGE_X509, 'pem');
 	t.ok(sshpk.Certificate.isCertificate(cert));
